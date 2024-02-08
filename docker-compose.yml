@@ -1,0 +1,187 @@
+version: '3'
+services:
+  server-origin:
+    build:
+      context: ./server-origin
+      dockerfile: Dockerfile
+    image: backend
+    container_name: server-origin
+    restart: always
+    volumes:
+      - ./server-origin:/var/www/
+    ports:
+      - '5000:5000'
+    depends_on:
+      - database
+    networks:
+      - deploy
+
+  server-cdn1:
+    build:
+      context: ./docker/services/cdn1
+      dockerfile: Dockerfile
+    container_name: server-cdn1
+    image: cdn1
+    restart: always
+    ports:
+      - '8001:80'
+    depends_on:
+      - server-origin
+    networks:
+      - deploy
+
+  server-cdn2:
+    build:
+      context: ./docker/services/cdn2
+      dockerfile: Dockerfile
+    container_name: server-cdn2
+    image: cdn2
+    restart: always
+    ports:
+      - '8002:80'
+    depends_on:
+      - server-origin
+    networks:
+      - deploy
+
+  server-cdn3:
+    build:
+      context: ./docker/services/cdn3
+      dockerfile: Dockerfile
+    container_name: server-cdn3
+    image: cdn3
+    restart: always
+    ports:
+      - '8003:80'
+    depends_on:
+      - server-origin
+    networks:
+      - deploy
+
+  server-loadbalancer:
+    build:
+      context: ./docker/services/loadbalancer
+      dockerfile: Dockerfile
+    container_name: server-loadbalancer
+    image: loadbalancer
+    restart: always
+    ports:
+      - '8080:80'
+    depends_on:
+      - server-cdn1
+      - server-cdn2
+      - server-cdn3
+    networks:
+      - deploy
+
+  database:
+    image: postgres:${POSTGRES_VERSION:-15}-alpine
+    container_name: postgresSQL
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-!ChangeMe!}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+    volumes:
+      - ./docker/volumes/postgres:/var/lib/postgresql/data:rw
+    networks:
+      - deploy
+
+  pgadmin:
+    container_name: pgAdmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+       - ./docker/volumes/pgadmin:/var/lib/pgadmin
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      - database
+    networks:
+      - deploy
+    restart: always
+
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: grafana
+    restart: always
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./docker/volumes/grafana:/var/lib/grafana
+    networks:
+      - deploy
+
+  prometheus:
+    image: prom/prometheus:v2.40.2
+    container_name: prometheus
+    ports:
+      - '9090:9090'
+    restart: always
+    volumes:
+      - ./docker/services/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./docker/volumes/prometheus:/prometheus
+    networks:
+      - deploy
+
+  nginx-prometheus-exporter:
+    image: nginx/nginx-prometheus-exporter:1.0
+    container_name: prometheus-nginx-exporter
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_USER: user
+      GF_SECURITY_ADMIN_PASSWORD: password
+    command:
+      - -nginx.scrape-uri=http://server-loadbalancer:80/metrics
+      - -nginx.scrape-uri=http://server-cdn1:80/metrics
+      - -nginx.scrape-uri=http://server-cdn2:80/metrics
+      - -nginx.scrape-uri=http://server-cdn3:80/metrics
+    expose:
+      - '9113'
+    networks:
+      - deploy
+    depends_on:
+      - prometheus
+
+  prometheus-node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: prometheus-node-exporter
+    restart: always
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - --collector.filesystem.ignored-mount-points
+      - "^/(sys|proc|dev|host|etc|rootfs/var/lib/docker/containers|rootfs/var/lib/docker/overlay2|rootfs/run/docker/netns|rootfs/var/lib/docker/aufs)($$|/)"
+    networks:
+      - deploy
+    privileged: true
+    depends_on:
+      - prometheus
+    expose:
+      - '9100'
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: always
+    expose:
+      - '8080'
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - deploy
+
+
+networks:
+  deploy:
+    driver: bridge
