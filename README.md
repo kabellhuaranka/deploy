@@ -1,4 +1,4 @@
-![banner](docker/services/cdn2/nginx.conf)
+![banner]([docker/services/cdn2/nginx.conf](https://github.com/kabellhuaranka/deploy/blob/main/docker-compose.yml))
 
 <h1 align="center">Hola 👋, soy [Tu Nombre]</h1>
 <h3 align="center">Especialista en Redes, Infraestructura y Soluciones SD-WAN/CDN</h3>
