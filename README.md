@@ -1,4 +1,4 @@
-![banner](https://yourdomain.com/banner-image.png)
+![banner](docker/services/cdn2/nginx.conf)
 
 <h1 align="center">Hola 👋, soy [Tu Nombre]</h1>
 <h3 align="center">Especialista en Redes, Infraestructura y Soluciones SD-WAN/CDN</h3>
